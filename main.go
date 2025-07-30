@@ -17,6 +17,7 @@ type Person struct {
 	Abilities []Ability  `pretty:"ord=4"`
 	Computer  Computer   `pretty:"ord=6"`
 	Servers   []Computer `pretty:"ord=5"`
+	Friends   []*Person  `pretty:"ord=7"`
 }
 
 type Computer struct {
@@ -29,6 +30,19 @@ type Ability struct {
 }
 
 func getPerson() Person {
+	friendA := Person{
+		Name:    "John's",
+		Surname: "Friend",
+		Age:     33,
+		Abilities: []Ability{
+			{Name: "Anime", Level: 99},
+			{Name: "osu!", Level: 50000},
+		},
+		Computer: Computer{
+			CPU: "???",
+		},
+	}
+
 	return Person{
 		Name:      "John",
 		Surname:   "Doe",
@@ -40,6 +54,7 @@ func getPerson() Person {
 		Servers: []Computer{
 			{CPU: "Cortex A76"},
 		},
+		Friends: []*Person{&friendA},
 	}
 }
 
@@ -180,6 +195,8 @@ func init() {
 		// Complex types
 		reflect.Slice:  sprintSlice,
 		reflect.Struct: sprintStruct,
+		// Pointer
+		reflect.Pointer: sprintPointer,
 	}
 }
 
@@ -248,6 +265,10 @@ func sprintSlice(v any, options SprintOptions) (string, error) {
 
 		listItemsBuilder.WriteString(partialResult)
 		listItemsBuilder.WriteString("\n")
+	}
+
+	if vValue.Len() == 0 {
+		listItemsBuilder.WriteString("... empty list ...")
 	}
 
 	listItemsSprint := listItemsBuilder.String()
@@ -342,6 +363,12 @@ func sprintStruct(v any, options SprintOptions) (string, error) {
 	lastEOLTrimmed := strings.TrimRight(resultBuilder.String(), "\n")
 
 	return lastEOLTrimmed, nil
+}
+
+func sprintPointer(v any, options SprintOptions) (string, error) {
+	vValue := reflect.ValueOf(v)
+
+	return sprintStruct(vValue.Elem().Interface(), options)
 }
 
 func sprintPretty(v any, options SprintOptions) (string, error) {
