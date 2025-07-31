@@ -23,7 +23,8 @@ func DefaultPrettyPrinter() PrettyPrinter {
 }
 
 type SprintOptions struct {
-	skipHeader bool
+	skipHeader  bool
+	forceIndent bool
 }
 
 func DefaultSprintOptions() SprintOptions {
@@ -141,7 +142,7 @@ func fieldRawTags(field reflect.StructField) (map[string]string, error) {
 	return result, nil
 }
 
-func (*PrettyPrinter) sprintPrimitive(v any) (string, error) {
+func (PrettyPrinter) sprintPrimitive(v any) (string, error) {
 	var supportedKinds = []reflect.Kind{
 		reflect.Bool,
 		reflect.Int,
@@ -170,7 +171,7 @@ func (*PrettyPrinter) sprintPrimitive(v any) (string, error) {
 	return fmt.Sprintf("%v", v), nil
 }
 
-func (pp *PrettyPrinter) sprintSlice(v any) (string, error) {
+func (pp PrettyPrinter) sprintSlice(v any) (string, error) {
 	if reflect.TypeOf(v).Kind() != reflect.Slice {
 		return "", errors.New("kind is not slice")
 	}
@@ -187,7 +188,10 @@ func (pp *PrettyPrinter) sprintSlice(v any) (string, error) {
 	var listItemsBuilder strings.Builder
 
 	for i := 0; i < vValue.Len(); i++ {
+		prevForceIndent := pp.options.forceIndent
+		pp.options.forceIndent = false
 		s, err := pp.SprintPretty(vValue.Index(i).Interface())
+		pp.options.forceIndent = prevForceIndent
 		if err != nil {
 			return "", err
 		}
@@ -221,7 +225,7 @@ func (pp *PrettyPrinter) sprintSlice(v any) (string, error) {
 	return lastEOLTrimmed, nil
 }
 
-func (pp *PrettyPrinter) sprintStruct(v any) (string, error) {
+func (pp PrettyPrinter) sprintStruct(v any) (string, error) {
 	if reflect.TypeOf(v).Kind() != reflect.Struct {
 		return "", errors.New("kind is not struct")
 	}
@@ -271,12 +275,16 @@ func (pp *PrettyPrinter) sprintStruct(v any) (string, error) {
 
 		var fieldBuilder strings.Builder
 
+		prevSkipHeader := pp.options.skipHeader
 		pp.options.skipHeader = true
+		prevForceIndent := pp.options.forceIndent
+		pp.options.forceIndent = true
 		innerSprint, err := pp.SprintPretty(field.Value.Interface())
 		if err != nil {
 			return "", err
 		}
-		pp.options.skipHeader = false
+		pp.options.skipHeader = prevSkipHeader
+		pp.options.forceIndent = prevForceIndent
 
 		innerKind := field.Value.Kind()
 
@@ -291,9 +299,13 @@ func (pp *PrettyPrinter) sprintStruct(v any) (string, error) {
 		fieldBuilder.WriteString(innerSprint)
 
 		fieldSprint := fieldBuilder.String()
-		indentedSprint := sprintIndent(fieldSprint, " ", 4)
 
-		resultBuilder.WriteString(indentedSprint)
+		fmt.Println(pp.options.forceIndent)
+		if !pp.options.skipHeader || pp.options.forceIndent {
+			fieldSprint = sprintIndent(fieldSprint, " ", 4)
+		}
+
+		resultBuilder.WriteString(fieldSprint)
 		resultBuilder.WriteString("\n")
 	}
 
@@ -302,7 +314,7 @@ func (pp *PrettyPrinter) sprintStruct(v any) (string, error) {
 	return lastEOLTrimmed, nil
 }
 
-func (pp *PrettyPrinter) sprintPointer(v any) (string, error) {
+func (pp PrettyPrinter) sprintPointer(v any) (string, error) {
 	_, wasVisited := pp.visitedPtrs[v]
 	if wasVisited {
 		return fmt.Sprintf("@ %p", v), nil
@@ -319,7 +331,7 @@ func (pp *PrettyPrinter) sprintPointer(v any) (string, error) {
 	}
 }
 
-func (pp *PrettyPrinter) SprintPretty(v any) (string, error) {
+func (pp PrettyPrinter) SprintPretty(v any) (string, error) {
 	vKind := reflect.TypeOf(v).Kind()
 
 	switch vKind {
