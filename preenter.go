@@ -187,7 +187,7 @@ func (pp *PrettyPrinter) sprintSlice(v any) (string, error) {
 	var listItemsBuilder strings.Builder
 
 	for i := 0; i < vValue.Len(); i++ {
-		s, err := pp.sprintPretty(vValue.Index(i).Interface())
+		s, err := pp.SprintPretty(vValue.Index(i).Interface())
 		if err != nil {
 			return "", err
 		}
@@ -272,7 +272,7 @@ func (pp *PrettyPrinter) sprintStruct(v any) (string, error) {
 		var fieldBuilder strings.Builder
 
 		pp.options.skipHeader = true
-		innerSprint, err := pp.sprintPretty(field.Value.Interface())
+		innerSprint, err := pp.SprintPretty(field.Value.Interface())
 		if err != nil {
 			return "", err
 		}
