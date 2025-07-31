@@ -15,8 +15,6 @@ type PrettyPrinter struct {
 	cycleDetector PtrCycleDetector
 }
 
-type printFunction func(any) (string, error)
-
 func DefaultPrettyPrinter() PrettyPrinter {
 	return PrettyPrinter{options: DefaultSprintOptions()}
 }
