@@ -11,12 +11,15 @@ import (
 )
 
 type PrettyPrinter struct {
-	options       SprintOptions
-	cycleDetector PtrCycleDetector
+	options     SprintOptions
+	visitedPtrs map[any]bool
 }
 
 func DefaultPrettyPrinter() PrettyPrinter {
-	return PrettyPrinter{options: DefaultSprintOptions()}
+	return PrettyPrinter{
+		options:     DefaultSprintOptions(),
+		visitedPtrs: make(map[any]bool),
+	}
 }
 
 type SprintOptions struct {
@@ -26,16 +29,6 @@ type SprintOptions struct {
 func DefaultSprintOptions() SprintOptions {
 	return SprintOptions{
 		skipHeader: false,
-	}
-}
-
-type PtrCycleDetector struct {
-	visitedPtrs map[any]bool
-}
-
-func DefaultPtrCycleDetector() PtrCycleDetector {
-	return PtrCycleDetector{
-		visitedPtrs: make(map[any]bool),
 	}
 }
 
@@ -310,6 +303,13 @@ func (pp *PrettyPrinter) sprintStruct(v any) (string, error) {
 }
 
 func (pp *PrettyPrinter) sprintPointer(v any) (string, error) {
+	_, wasVisited := pp.visitedPtrs[v]
+	if wasVisited {
+		return "~ detected pointer cycle, breaking ~", nil
+	}
+
+	pp.visitedPtrs[v] = true
+
 	vValue := reflect.ValueOf(v)
 	vType := reflect.TypeOf(v)
 	vElem := vValue.Elem()

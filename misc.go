@@ -31,9 +31,10 @@ func getPerson() Person {
 		Computer: Computer{
 			CPU: "???",
 		},
+		Friends: []*Person{},
 	}
 
-	return Person{
+	person := Person{
 		Name:      "John",
 		Surname:   "Doe",
 		Age:       31,
@@ -46,6 +47,10 @@ func getPerson() Person {
 		},
 		Friends: []*Person{&friendA},
 	}
+
+	friendA.Friends = append(friendA.Friends, &person)
+
+	return person
 }
 
 func getAbilities() []Ability {
