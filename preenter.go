@@ -24,7 +24,6 @@ func DefaultPrettyPrinter() PrettyPrinter {
 
 type SprintOptions struct {
 	skipHeader bool
-	skipIndent bool
 }
 
 func DefaultSprintOptions() SprintOptions {
@@ -188,9 +187,7 @@ func (pp *PrettyPrinter) sprintSlice(v any) (string, error) {
 	var listItemsBuilder strings.Builder
 
 	for i := 0; i < vValue.Len(); i++ {
-		pp.options.skipIndent = true
 		s, err := pp.SprintPretty(vValue.Index(i).Interface())
-		pp.options.skipIndent = false
 		if err != nil {
 			return "", err
 		}
@@ -294,20 +291,13 @@ func (pp *PrettyPrinter) sprintStruct(v any) (string, error) {
 		fieldBuilder.WriteString(innerSprint)
 
 		fieldSprint := fieldBuilder.String()
+		indentedSprint := sprintIndent(fieldSprint, " ", 4)
 
-		if !pp.options.skipIndent {
-			fieldSprint = sprintIndent(fieldSprint, " ", 4)
-		}
-
-		resultBuilder.WriteString(fieldSprint)
+		resultBuilder.WriteString(indentedSprint)
 		resultBuilder.WriteString("\n")
 	}
 
 	lastEOLTrimmed := strings.TrimRight(resultBuilder.String(), "\n")
-
-	if pp.options.skipIndent {
-		pp.options.skipIndent = false
-	}
 
 	return lastEOLTrimmed, nil
 }
