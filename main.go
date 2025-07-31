@@ -13,38 +13,12 @@ import (
 type PrettyPrinter struct {
 	options       SprintOptions
 	cycleDetector PtrCycleDetector
-	printHandlers map[reflect.Kind]printFunction
 }
 
 type printFunction func(any) (string, error)
 
 func DefaultPrettyPrinter() PrettyPrinter {
-	pp := PrettyPrinter{options: DefaultSprintOptions()}
-	pp.printHandlers = map[reflect.Kind]printFunction{
-		reflect.Bool:       pp.sprintPrimitive,
-		reflect.Int:        pp.sprintPrimitive,
-		reflect.Int8:       pp.sprintPrimitive,
-		reflect.Int16:      pp.sprintPrimitive,
-		reflect.Int32:      pp.sprintPrimitive,
-		reflect.Int64:      pp.sprintPrimitive,
-		reflect.Uint:       pp.sprintPrimitive,
-		reflect.Uint8:      pp.sprintPrimitive,
-		reflect.Uint16:     pp.sprintPrimitive,
-		reflect.Uint32:     pp.sprintPrimitive,
-		reflect.Uint64:     pp.sprintPrimitive,
-		reflect.Float32:    pp.sprintPrimitive,
-		reflect.Float64:    pp.sprintPrimitive,
-		reflect.Complex64:  pp.sprintPrimitive,
-		reflect.Complex128: pp.sprintPrimitive,
-		reflect.String:     pp.sprintPrimitive,
-		// Complex types
-		reflect.Slice:  pp.sprintSlice,
-		reflect.Struct: pp.sprintStruct,
-		// Pointer
-		reflect.Pointer: pp.sprintPointer,
-	}
-
-	return pp
+	return PrettyPrinter{options: DefaultSprintOptions()}
 }
 
 type SprintOptions struct {
@@ -306,12 +280,12 @@ func (pp *PrettyPrinter) sprintStruct(v any) (string, error) {
 
 		var fieldBuilder strings.Builder
 
-		innerOptions := pp.options
-		innerOptions.skipHeader = true
+		pp.options.skipHeader = true
 		innerSprint, err := pp.sprintPretty(field.Value.Interface())
 		if err != nil {
 			return "", err
 		}
+		pp.options.skipHeader = false
 
 		innerKind := field.Value.Kind()
 
@@ -339,18 +313,34 @@ func (pp *PrettyPrinter) sprintStruct(v any) (string, error) {
 
 func (pp *PrettyPrinter) sprintPointer(v any) (string, error) {
 	vValue := reflect.ValueOf(v)
+	vType := reflect.TypeOf(v)
+	vElem := vValue.Elem()
 
-	return pp.sprintStruct(vValue.Elem().Interface())
+	if vElem != reflect.Zero(vType) {
+		return pp.sprintStruct(vValue.Elem().Interface())
+	} else {
+		return fmt.Sprintf("@ %p", v), nil
+	}
 }
 
 func (pp *PrettyPrinter) sprintPretty(v any) (string, error) {
 	vKind := reflect.TypeOf(v).Kind()
-	vSprintHandler, ok := pp.printHandlers[vKind]
-	if !ok {
+
+	switch vKind {
+	case reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16,
+		reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8,
+		reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32,
+		reflect.Float64, reflect.Complex64, reflect.Complex128, reflect.String:
+		return pp.sprintPrimitive(v)
+	case reflect.Slice:
+		return pp.sprintSlice(v)
+	case reflect.Struct:
+		return pp.sprintStruct(v)
+	case reflect.Pointer:
+		return pp.sprintPointer(v)
+	default:
 		return "", fmt.Errorf("unsupported kind: %s", vKind)
 	}
-
-	return vSprintHandler(v)
 }
 
 func sprintIndent(s string, prefixSymbol string, width uint) string {
