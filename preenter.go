@@ -300,7 +300,6 @@ func (pp PrettyPrinter) sprintStruct(v any) (string, error) {
 
 		fieldSprint := fieldBuilder.String()
 
-		fmt.Println(pp.options.forceIndent)
 		if !pp.options.skipHeader || pp.options.forceIndent {
 			fieldSprint = sprintIndent(fieldSprint, " ", 4)
 		}
