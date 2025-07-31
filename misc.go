@@ -1,4 +1,4 @@
-package main
+package preenter
 
 type Person struct {
 	Name      string     `pretty:"sem=title,ord=1"`

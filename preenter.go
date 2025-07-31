@@ -1,4 +1,4 @@
-package main
+package preenter
 
 import (
 	"errors"
@@ -351,14 +351,4 @@ func sprintIndent(s string, prefixSymbol string, width uint) string {
 	}
 
 	return strings.Join(lines, "\n")
-}
-
-func main() {
-	pp := DefaultPrettyPrinter()
-	structText, err := pp.sprintStruct(getPerson())
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Println(structText)
 }
