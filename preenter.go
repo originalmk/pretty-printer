@@ -305,7 +305,7 @@ func (pp *PrettyPrinter) sprintStruct(v any) (string, error) {
 func (pp *PrettyPrinter) sprintPointer(v any) (string, error) {
 	_, wasVisited := pp.visitedPtrs[v]
 	if wasVisited {
-		return "~ detected pointer cycle, breaking ~", nil
+		return fmt.Sprintf("@ %p", v), nil
 	}
 
 	pp.visitedPtrs[v] = true
