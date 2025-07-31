@@ -1,3 +1,3 @@
-module gitlab.com/krzmaciek/pretty-printer
+module gitlab.com/krzmaciek/preenter
 
 go 1.24.5
