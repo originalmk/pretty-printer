@@ -10,104 +10,70 @@ import (
 	"strings"
 )
 
-type Person struct {
-	Name      string     `pretty:"sem=title,ord=1"`
-	Surname   string     `pretty:"ord=2"`
-	Age       uint       `pretty:"ord=3"`
-	Abilities []Ability  `pretty:"ord=4"`
-	Computer  Computer   `pretty:"ord=6"`
-	Servers   []Computer `pretty:"ord=5"`
-	Friends   []*Person  `pretty:"ord=7"`
+type PrettyPrinter struct {
+	options       SprintOptions
+	cycleDetector PtrCycleDetector
+	printHandlers map[reflect.Kind]printFunction
 }
 
-type Computer struct {
-	CPU string
-}
+type printFunction func(any) (string, error)
 
-type Ability struct {
-	Name  string `pretty:"sem=title"`
-	Level uint
-}
-
-func getPerson() Person {
-	friendA := Person{
-		Name:    "John's",
-		Surname: "Friend",
-		Age:     33,
-		Abilities: []Ability{
-			{Name: "Anime", Level: 99},
-			{Name: "osu!", Level: 50000},
-		},
-		Computer: Computer{
-			CPU: "???",
-		},
+func DefaultPrettyPrinter() PrettyPrinter {
+	pp := PrettyPrinter{options: DefaultSprintOptions()}
+	pp.printHandlers = map[reflect.Kind]printFunction{
+		reflect.Bool:       pp.sprintPrimitive,
+		reflect.Int:        pp.sprintPrimitive,
+		reflect.Int8:       pp.sprintPrimitive,
+		reflect.Int16:      pp.sprintPrimitive,
+		reflect.Int32:      pp.sprintPrimitive,
+		reflect.Int64:      pp.sprintPrimitive,
+		reflect.Uint:       pp.sprintPrimitive,
+		reflect.Uint8:      pp.sprintPrimitive,
+		reflect.Uint16:     pp.sprintPrimitive,
+		reflect.Uint32:     pp.sprintPrimitive,
+		reflect.Uint64:     pp.sprintPrimitive,
+		reflect.Float32:    pp.sprintPrimitive,
+		reflect.Float64:    pp.sprintPrimitive,
+		reflect.Complex64:  pp.sprintPrimitive,
+		reflect.Complex128: pp.sprintPrimitive,
+		reflect.String:     pp.sprintPrimitive,
+		// Complex types
+		reflect.Slice:  pp.sprintSlice,
+		reflect.Struct: pp.sprintStruct,
+		// Pointer
+		reflect.Pointer: pp.sprintPointer,
 	}
 
-	return Person{
-		Name:      "John",
-		Surname:   "Doe",
-		Age:       31,
-		Abilities: getAbilities(),
-		Computer: Computer{
-			CPU: "Ryzen 7700",
-		},
-		Servers: []Computer{
-			{CPU: "Cortex A76"},
-		},
-		Friends: []*Person{&friendA},
-	}
+	return pp
 }
 
-func getAbilities() []Ability {
-	return []Ability{
-		{"C Programmer", 5},
-		{"Go Programmer", 4},
+type SprintOptions struct {
+	skipHeader bool
+}
+
+func DefaultSprintOptions() SprintOptions {
+	return SprintOptions{
+		skipHeader: false,
 	}
 }
 
-type ParsedTags struct {
-	isTitle    bool
-	orderIndex uint
+type PtrCycleDetector struct {
+	visitedPtrs map[any]bool
 }
 
-func parseTags(rawTags map[string]string) ParsedTags {
-	result := ParsedTags{}
-
-	semTag, ok := rawTags["sem"]
-	if ok {
-		result.isTitle = (semTag == "title")
+func DefaultPtrCycleDetector() PtrCycleDetector {
+	return PtrCycleDetector{
+		visitedPtrs: make(map[any]bool),
 	}
-
-	ordTag, ok := rawTags["ord"]
-	if ok {
-		orderIndex, _ := strconv.Atoi(ordTag)
-		result.orderIndex = uint(orderIndex)
-	}
-
-	return result
 }
 
-func prettyTags(field reflect.StructField) (ParsedTags, error) {
-	result := make(map[string]string)
-	prettyTag := field.Tag.Get("pretty")
-
-	if prettyTag != "" {
-		for tagElement := range strings.SplitSeq(prettyTag, ",") {
-			elementSplit := strings.Split(tagElement, "=")
-
-			if len(elementSplit) != 2 {
-				return ParsedTags{}, errors.New("invalid tag")
-			}
-
-			elementKey := elementSplit[0]
-			elementValue := elementSplit[1]
-
-			result[elementKey] = elementValue
-		}
-	}
-
-	return parseTags(result), nil
+type AnnotatedStruct struct {
+	HasTitleField   bool
+	TitleField      AnnotatedField
+	AnnotatedFields AnnotatedFields
 }
+
+type AnnotatedFields = map[string]AnnotatedField
 
 type AnnotatedField struct {
 	Name  string
@@ -115,34 +81,9 @@ type AnnotatedField struct {
 	Tags  ParsedTags
 }
 
-type AnnotatedFields = map[string]AnnotatedField
-
-func annotateFields(v any) (AnnotatedFields, error) {
-	result := make(AnnotatedFields)
-	vType := reflect.TypeOf(v)
-	vFields := reflect.VisibleFields(vType)
-	vValue := reflect.ValueOf(v)
-
-	for _, field := range vFields {
-		parsedTags, err := prettyTags(field)
-		if err != nil {
-			return nil, err
-		}
-
-		result[field.Name] = AnnotatedField{
-			Name:  field.Name,
-			Value: vValue.FieldByName(field.Name),
-			Tags:  parsedTags,
-		}
-	}
-
-	return result, nil
-}
-
-type AnnotatedStruct struct {
-	HasTitleField   bool
-	TitleField      AnnotatedField
-	AnnotatedFields AnnotatedFields
+type ParsedTags struct {
+	isTitle    bool
+	orderIndex uint
 }
 
 func annotateStruct(v any) (AnnotatedStruct, error) {
@@ -169,38 +110,73 @@ func annotateStruct(v any) (AnnotatedStruct, error) {
 	}, nil
 }
 
-type printFunction func(any, SprintOptions) (string, error)
+func annotateFields(v any) (AnnotatedFields, error) {
+	result := make(AnnotatedFields)
+	vType := reflect.TypeOf(v)
+	vFields := reflect.VisibleFields(vType)
+	vValue := reflect.ValueOf(v)
 
-var printHandlers map[reflect.Kind]printFunction
+	for _, field := range vFields {
+		parsedTags, err := fieldParsedTags(field)
+		if err != nil {
+			return nil, err
+		}
 
-func init() {
-	printHandlers = map[reflect.Kind]printFunction{
-		// Primitives
-		reflect.Bool:       sprintPrimitive,
-		reflect.Int:        sprintPrimitive,
-		reflect.Int8:       sprintPrimitive,
-		reflect.Int16:      sprintPrimitive,
-		reflect.Int32:      sprintPrimitive,
-		reflect.Int64:      sprintPrimitive,
-		reflect.Uint:       sprintPrimitive,
-		reflect.Uint8:      sprintPrimitive,
-		reflect.Uint16:     sprintPrimitive,
-		reflect.Uint32:     sprintPrimitive,
-		reflect.Uint64:     sprintPrimitive,
-		reflect.Float32:    sprintPrimitive,
-		reflect.Float64:    sprintPrimitive,
-		reflect.Complex64:  sprintPrimitive,
-		reflect.Complex128: sprintPrimitive,
-		reflect.String:     sprintPrimitive,
-		// Complex types
-		reflect.Slice:  sprintSlice,
-		reflect.Struct: sprintStruct,
-		// Pointer
-		reflect.Pointer: sprintPointer,
+		result[field.Name] = AnnotatedField{
+			Name:  field.Name,
+			Value: vValue.FieldByName(field.Name),
+			Tags:  parsedTags,
+		}
 	}
+
+	return result, nil
 }
 
-func sprintPrimitive(v any, options SprintOptions) (string, error) {
+func fieldParsedTags(field reflect.StructField) (ParsedTags, error) {
+	result := ParsedTags{}
+
+	rawTags, err := fieldRawTags(field)
+	if err != nil {
+		return result, err
+	}
+
+	semTag, ok := rawTags["sem"]
+	if ok {
+		result.isTitle = (semTag == "title")
+	}
+
+	ordTag, ok := rawTags["ord"]
+	if ok {
+		orderIndex, _ := strconv.Atoi(ordTag)
+		result.orderIndex = uint(orderIndex)
+	}
+
+	return result, nil
+}
+
+func fieldRawTags(field reflect.StructField) (map[string]string, error) {
+	result := make(map[string]string)
+	prettyTag := field.Tag.Get("pretty")
+
+	if prettyTag != "" {
+		for tagElement := range strings.SplitSeq(prettyTag, ",") {
+			elementSplit := strings.Split(tagElement, "=")
+
+			if len(elementSplit) != 2 {
+				return result, errors.New("invalid tag")
+			}
+
+			elementKey := elementSplit[0]
+			elementValue := elementSplit[1]
+
+			result[elementKey] = elementValue
+		}
+	}
+
+	return result, nil
+}
+
+func (*PrettyPrinter) sprintPrimitive(v any) (string, error) {
 	var supportedKinds = []reflect.Kind{
 		reflect.Bool,
 		reflect.Int,
@@ -229,14 +205,14 @@ func sprintPrimitive(v any, options SprintOptions) (string, error) {
 	return fmt.Sprintf("%v", v), nil
 }
 
-func sprintSlice(v any, options SprintOptions) (string, error) {
+func (pp *PrettyPrinter) sprintSlice(v any) (string, error) {
 	if reflect.TypeOf(v).Kind() != reflect.Slice {
 		return "", errors.New("kind is not slice")
 	}
 
 	var resultBuilder strings.Builder
 
-	if !options.SkipHeader {
+	if !pp.options.skipHeader {
 		resultBuilder.WriteString("List")
 		resultBuilder.WriteString("\n")
 	}
@@ -246,7 +222,7 @@ func sprintSlice(v any, options SprintOptions) (string, error) {
 	var listItemsBuilder strings.Builder
 
 	for i := 0; i < vValue.Len(); i++ {
-		s, err := sprintPretty(vValue.Index(i).Interface(), SprintOptionsDefault())
+		s, err := pp.sprintPretty(vValue.Index(i).Interface())
 		if err != nil {
 			return "", err
 		}
@@ -280,19 +256,7 @@ func sprintSlice(v any, options SprintOptions) (string, error) {
 	return lastEOLTrimmed, nil
 }
 
-func sprintIndent(s string, prefixSymbol string, width uint) string {
-	s = strings.TrimRight(s, "\n")
-	lines := strings.Split(s, "\n")
-	prefix := strings.Repeat(prefixSymbol, int(width))
-
-	for i, l := range lines {
-		lines[i] = prefix + l
-	}
-
-	return strings.Join(lines, "\n")
-}
-
-func sprintStruct(v any, options SprintOptions) (string, error) {
+func (pp *PrettyPrinter) sprintStruct(v any) (string, error) {
 	if reflect.TypeOf(v).Kind() != reflect.Struct {
 		return "", errors.New("kind is not struct")
 	}
@@ -305,24 +269,32 @@ func sprintStruct(v any, options SprintOptions) (string, error) {
 	var resultBuilder strings.Builder
 
 	if annotated.HasTitleField {
-		prettyPrimitive, err := sprintPrimitive(annotated.TitleField.Value.Interface(), SprintOptionsDefault())
+		prettyPrimitive, err := pp.sprintPrimitive(annotated.TitleField.Value.Interface())
 		if err != nil {
 			return "", err
 		}
 
 		resultBuilder.WriteString(prettyPrimitive)
 		resultBuilder.WriteString("\n")
-	} else if !options.SkipHeader {
+	} else if !pp.options.skipHeader {
 		resultBuilder.WriteString(reflect.TypeOf(v).Name())
 		resultBuilder.WriteString("\n")
 	}
 
 	fieldKeys := slices.Collect(maps.Keys(annotated.AnnotatedFields))
 	slices.SortFunc(fieldKeys, func(a string, b string) int {
-		aVal := annotated.AnnotatedFields[a]
-		bVal := annotated.AnnotatedFields[b]
+		aVal := annotated.AnnotatedFields[a].Tags.orderIndex
+		bVal := annotated.AnnotatedFields[b].Tags.orderIndex
 
-		return int(aVal.Tags.orderIndex - bVal.Tags.orderIndex)
+		if aVal == 0 && bVal != 0 {
+			return 1
+		}
+
+		if bVal == 0 && aVal != 0 {
+			return -1
+		}
+
+		return int(aVal - bVal)
 	})
 
 	for _, fieldKey := range fieldKeys {
@@ -334,9 +306,9 @@ func sprintStruct(v any, options SprintOptions) (string, error) {
 
 		var fieldBuilder strings.Builder
 
-		innerOptions := SprintOptionsDefault()
-		innerOptions.SkipHeader = true
-		innerSprint, err := sprintPretty(field.Value.Interface(), innerOptions)
+		innerOptions := pp.options
+		innerOptions.skipHeader = true
+		innerSprint, err := pp.sprintPretty(field.Value.Interface())
 		if err != nil {
 			return "", err
 		}
@@ -365,34 +337,37 @@ func sprintStruct(v any, options SprintOptions) (string, error) {
 	return lastEOLTrimmed, nil
 }
 
-func sprintPointer(v any, options SprintOptions) (string, error) {
+func (pp *PrettyPrinter) sprintPointer(v any) (string, error) {
 	vValue := reflect.ValueOf(v)
 
-	return sprintStruct(vValue.Elem().Interface(), options)
+	return pp.sprintStruct(vValue.Elem().Interface())
 }
 
-func sprintPretty(v any, options SprintOptions) (string, error) {
+func (pp *PrettyPrinter) sprintPretty(v any) (string, error) {
 	vKind := reflect.TypeOf(v).Kind()
-	vSprintHandler, ok := printHandlers[vKind]
+	vSprintHandler, ok := pp.printHandlers[vKind]
 	if !ok {
 		return "", fmt.Errorf("unsupported kind: %s", vKind)
 	}
 
-	return vSprintHandler(v, options)
+	return vSprintHandler(v)
 }
 
-type SprintOptions struct {
-	SkipHeader bool
-}
+func sprintIndent(s string, prefixSymbol string, width uint) string {
+	s = strings.TrimRight(s, "\n")
+	lines := strings.Split(s, "\n")
+	prefix := strings.Repeat(prefixSymbol, int(width))
 
-func SprintOptionsDefault() SprintOptions {
-	return SprintOptions{
-		SkipHeader: false,
+	for i, l := range lines {
+		lines[i] = prefix + l
 	}
+
+	return strings.Join(lines, "\n")
 }
 
 func main() {
-	structText, err := sprintStruct(getPerson(), SprintOptionsDefault())
+	pp := DefaultPrettyPrinter()
+	structText, err := pp.sprintStruct(getPerson())
 	if err != nil {
 		panic(err)
 	}
