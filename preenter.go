@@ -311,9 +311,8 @@ func (pp *PrettyPrinter) sprintPointer(v any) (string, error) {
 	pp.visitedPtrs[v] = true
 
 	vValue := reflect.ValueOf(v)
-	vElem := vValue.Elem()
 
-	if vElem != reflect.Zero(reflect.TypeOf(v)) {
+	if !vValue.IsNil() {
 		return pp.sprintStruct(vValue.Elem().Interface())
 	} else {
 		return fmt.Sprintf("@ %p", v), nil
