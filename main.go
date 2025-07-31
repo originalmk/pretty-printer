@@ -321,7 +321,7 @@ func (pp *PrettyPrinter) sprintPointer(v any) (string, error) {
 	}
 }
 
-func (pp *PrettyPrinter) sprintPretty(v any) (string, error) {
+func (pp *PrettyPrinter) SprintPretty(v any) (string, error) {
 	vKind := reflect.TypeOf(v).Kind()
 
 	switch vKind {
